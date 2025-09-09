@@ -1,0 +1,146 @@
+# Bridge Service Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# Spring Configuration
+spring:
+  application:
+    name: bridge-service
+  profiles:
+    active: development
+  
+  # JSON configuration
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+# Bridge Service Configuration
+bridge:
+  services:
+    application-a:
+      base-url: http://localhost:8081
+      api-key: ${APPLICATION_A_API_KEY:your-api-key-here}
+      enabled: true
+    application-b:
+      base-url: http://localhost:8082
+      api-key: ${APPLICATION_B_API_KEY:your-api-key-here}
+      enabled: true
+    timeout-millis: 5000
+    max-retries: 3
+
+# Resilience4j Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      applicationA:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 5s
+        failure-rate-threshold: 50
+        event-consumer-buffer-size: 10
+      applicationB:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 5s
+        failure-rate-threshold: 50
+        event-consumer-buffer-size: 10
+  
+  retry:
+    instances:
+      applicationA:
+        max-attempts: 3
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+      applicationB:
+        max-attempts: 3
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,retries
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    com.example.bridgeservice: DEBUG
+    org.springframework.web: INFO
+    io.github.resilience4j: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/bridge-service.log
+
+---
+# Development Profile
+spring:
+  config:
+    activate:
+      on-profile: development
+  
+bridge:
+  services:
+    application-a:
+      base-url: http://localhost:8081
+      enabled: true
+    application-b:
+      base-url: http://localhost:8082
+      enabled: true
+
+logging:
+  level:
+    com.example.bridgeservice: DEBUG
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: production
+
+bridge:
+  services:
+    application-a:
+      base-url: ${APPLICATION_A_URL:http://app-a-service:8080}
+      api-key: ${APPLICATION_A_API_KEY}
+      enabled: ${APPLICATION_A_ENABLED:true}
+    application-b:
+      base-url: ${APPLICATION_B_URL:http://app-b-service:8080}
+      api-key: ${APPLICATION_B_API_KEY}
+      enabled: ${APPLICATION_B_ENABLED:true}
+    timeout-millis: ${SERVICE_TIMEOUT:10000}
+    max-retries: ${MAX_RETRIES:3}
+
+logging:
+  level:
+    com.example.bridgeservice: INFO
+    org.springframework.web: WARN
