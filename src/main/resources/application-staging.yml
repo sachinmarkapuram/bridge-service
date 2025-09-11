@@ -1,0 +1,99 @@
+# Staging Environment Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: bridge-service-staging
+  profiles:
+    active: staging
+
+# Staging service configurations
+bridge:
+  services:
+    application-a:
+      base-url: ${APPLICATION_A_URL:http://staging-app-a-service:8080}
+      api-key: ${APPLICATION_A_API_KEY}
+      enabled: ${APPLICATION_A_ENABLED:true}
+    application-b:
+      base-url: ${APPLICATION_B_URL:http://staging-app-b-service:8080}
+      api-key: ${APPLICATION_B_API_KEY}
+      enabled: ${APPLICATION_B_ENABLED:true}
+    timeout-millis: ${SERVICE_TIMEOUT:8000}
+    max-retries: ${MAX_RETRIES:3}
+
+# Actuator configuration for staging
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,retries
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+  health:
+    circuitbreakers:
+      enabled: true
+  server:
+    port: 8080
+
+# Staging logging configuration
+logging:
+  level:
+    com.example.bridgeservice: INFO
+    org.springframework.web: INFO
+    io.github.resilience4j: INFO
+    org.springframework.security: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/bridge-service-staging.log
+    max-size: 100MB
+    max-history: 7
+
+# Staging Resilience4j configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      applicationA:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 10s
+        failure-rate-threshold: 60
+        event-consumer-buffer-size: 10
+      applicationB:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 10s
+        failure-rate-threshold: 60
+        event-consumer-buffer-size: 10
+  retry:
+    instances:
+      applicationA:
+        max-attempts: 3
+        wait-duration: 2s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+      applicationB:
+        max-attempts: 3
+        wait-duration: 2s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException

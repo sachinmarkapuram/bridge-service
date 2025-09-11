@@ -1,0 +1,66 @@
+# Test Environment Configuration
+server:
+  port: 0  # Random available port for tests
+
+spring:
+  application:
+    name: bridge-service-test
+
+# Mock service configurations for testing
+bridge:
+  services:
+    application-a:
+      base-url: http://localhost:${test.mock.port.a:8181}
+      api-key: test-api-key-a
+      enabled: true
+    application-b:
+      base-url: http://localhost:${test.mock.port.b:8182}
+      api-key: test-api-key-b
+      enabled: true
+    timeout-millis: 1000
+    max-retries: 1
+
+# Disable Actuator authentication for tests
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+  security:
+    enabled: false
+
+# Test logging configuration
+logging:
+  level:
+    com.example.bridgeservice: DEBUG
+    org.springframework.web: WARN
+    io.github.resilience4j: WARN
+    org.apache.http: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Resilience4j test configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      applicationA:
+        sliding-window-size: 3
+        minimum-number-of-calls: 2
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 1s
+      applicationB:
+        sliding-window-size: 3
+        minimum-number-of-calls: 2
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 1s
+  retry:
+    instances:
+      applicationA:
+        max-attempts: 2
+        wait-duration: 100ms
+      applicationB:
+        max-attempts: 2
+        wait-duration: 100ms

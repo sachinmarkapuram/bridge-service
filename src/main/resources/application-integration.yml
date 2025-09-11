@@ -1,0 +1,88 @@
+# Integration Test Environment Configuration
+server:
+  port: 8080
+
+spring:
+  application:
+    name: bridge-service-integration
+  profiles:
+    active: integration
+
+# Integration test service configurations
+bridge:
+  services:
+    application-a:
+      base-url: http://application-a:80
+      api-key: integration-test-api-key-a
+      enabled: true
+    application-b:
+      base-url: http://application-b:80
+      api-key: integration-test-api-key-b
+      enabled: true
+    timeout-millis: 5000
+    max-retries: 2
+
+# Full actuator exposure for integration testing
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+# Integration test logging
+logging:
+  level:
+    com.example.bridgeservice: INFO
+    org.springframework.web: WARN
+    io.github.resilience4j: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Resilience4j integration test configuration  
+resilience4j:
+  circuitbreaker:
+    instances:
+      applicationA:
+        register-health-indicator: true
+        sliding-window-size: 5
+        minimum-number-of-calls: 3
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 5s
+        failure-rate-threshold: 50
+        event-consumer-buffer-size: 10
+      applicationB:
+        register-health-indicator: true
+        sliding-window-size: 5
+        minimum-number-of-calls: 3
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 5s
+        failure-rate-threshold: 50
+        event-consumer-buffer-size: 10
+  retry:
+    instances:
+      applicationA:
+        max-attempts: 2
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+      applicationB:
+        max-attempts: 2
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException

@@ -1,0 +1,394 @@
+name: Bridge Service CI/CD
+
+on:
+  push:
+    branches: [ main, docker_setup, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  JAVA_VERSION: '17'
+  MAVEN_OPTS: '-Xmx2048m -Xms1024m'
+  REGISTRY: gcr.io
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: bridge-service
+  REGION: us-central1
+
+jobs:
+  # ================================
+  # Unit Tests
+  # ================================
+  unit-tests:
+    name: 🧪 Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: 🔍 Cache Maven dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+        
+    - name: 🧪 Run unit tests
+      run: |
+        ./mvnw clean test \
+          -Dspring.profiles.active=test \
+          -Dmaven.test.failure.ignore=false \
+          -B -V
+          
+    - name: 📊 Generate test report
+      uses: dorny/test-reporter@v1
+      if: success() || failure()
+      with:
+        name: Unit Test Results
+        path: target/surefire-reports/*.xml
+        reporter: java-junit
+        fail-on-error: true
+        
+    - name: 📈 Upload coverage reports to Codecov
+      if: success()
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./target/site/jacoco/jacoco.xml
+        flags: unittests
+        name: codecov-unit-tests
+        fail_ci_if_error: false
+
+  # ================================
+  # Integration Tests with Mock Services
+  # ================================
+  integration-tests:
+    name: 🔧 Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔨 Build application
+      run: ./mvnw clean package -DskipTests -B
+      
+    - name: 🐳 Build Docker image
+      run: |
+        docker build -t ${{ env.SERVICE_NAME }}:test .
+        
+    - name: 🚀 Start test environment
+      run: |
+        docker compose -f docker-compose.yml up -d
+        
+    - name: ⏳ Wait for services to be ready
+      run: |
+        echo "Waiting for bridge service to be ready..."
+        timeout 120s bash -c 'until curl -f http://localhost:8080/actuator/health; do sleep 5; done'
+        echo "Bridge service is ready!"
+        
+    - name: 🧪 Run integration tests
+      run: |
+        ./mvnw verify \
+          -Dspring.profiles.active=integration \
+          -Dtest.integration.enabled=true \
+          -B
+          
+    - name: 📊 Generate integration test report
+      uses: dorny/test-reporter@v1
+      if: success() || failure()
+      with:
+        name: Integration Test Results
+        path: target/failsafe-reports/*.xml
+        reporter: java-junit
+        fail-on-error: true
+        
+    - name: 🧹 Cleanup test environment
+      if: always()
+      run: |
+        docker compose -f docker-compose.yml down -v
+        docker system prune -f
+
+  # ================================
+  # Security and Code Quality
+  # ================================
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: ☕ Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: 🔍 Run OWASP Dependency Check
+      run: |
+        ./mvnw org.owasp:dependency-check-maven:check \
+          -DfailBuildOnCVSS=7 \
+          -DsuppressionFile=.github/owasp-suppression.xml || true
+          
+    - name: 📊 Upload security scan results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-results
+        path: target/dependency-check-report.html
+
+  # ================================
+  # Build and Push Container Image
+  # ================================
+  build-and-push:
+    name: 🐳 Build & Push Image
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: github.event_name != 'pull_request'
+    
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔐 Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+        
+    - name: 🔧 Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      
+    - name: 🐳 Configure Docker for GCR
+      run: gcloud auth configure-docker gcr.io
+      
+    - name: 🏷️ Generate image tags
+      id: image
+      run: |
+        BRANCH=${GITHUB_REF#refs/heads/}
+        SHORT_SHA=${GITHUB_SHA::7}
+        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+        
+        IMAGE="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}"
+        
+        echo "image=${IMAGE}" >> $GITHUB_OUTPUT
+        echo "tags=${IMAGE}:${SHORT_SHA},${IMAGE}:${BRANCH}-${TIMESTAMP},${IMAGE}:latest" >> $GITHUB_OUTPUT
+        
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔨 Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.image.outputs.tags }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+  # ================================
+  # Deploy to Google Cloud Run - Staging
+  # ================================
+  deploy-staging:
+    name: 🚀 Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/docker_setup' || github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔐 Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+        
+    - name: 🔧 Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      
+    - name: 🚀 Deploy to Cloud Run
+      run: |
+        gcloud run deploy ${{ env.SERVICE_NAME }}-staging \
+          --image=${{ needs.build-and-push.outputs.image }}:latest \
+          --platform=managed \
+          --region=${{ env.REGION }} \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=1Gi \
+          --cpu=1 \
+          --min-instances=0 \
+          --max-instances=10 \
+          --set-env-vars="SPRING_PROFILES_ACTIVE=staging,APPLICATION_A_URL=${{ secrets.STAGING_APP_A_URL }},APPLICATION_B_URL=${{ secrets.STAGING_APP_B_URL }}" \
+          --set-secrets="APPLICATION_A_API_KEY=staging-app-a-key:latest,APPLICATION_B_API_KEY=staging-app-b-key:latest" \
+          --service-account=${{ secrets.CLOUD_RUN_SERVICE_ACCOUNT }} \
+          --labels=environment=staging,service=bridge-service
+          
+    - name: 🌍 Get service URL
+      run: |
+        SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }}-staging \
+          --platform=managed \
+          --region=${{ env.REGION }} \
+          --format='value(status.url)')
+        echo "Service deployed to: $SERVICE_URL"
+        echo "STAGING_URL=$SERVICE_URL" >> $GITHUB_ENV
+        
+    - name: 🏥 Health check
+      run: |
+        sleep 30
+        curl -f "${{ env.STAGING_URL }}/actuator/health" || exit 1
+        echo "✅ Staging deployment health check passed!"
+
+  # ================================
+  # Deploy to Google Cloud Run - Production
+  # ================================
+  deploy-production:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-staging]
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment: production
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔐 Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+        
+    - name: 🔧 Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      
+    - name: 🚀 Deploy to Cloud Run
+      run: |
+        gcloud run deploy ${{ env.SERVICE_NAME }} \
+          --image=${{ needs.build-and-push.outputs.image }}:latest \
+          --platform=managed \
+          --region=${{ env.REGION }} \
+          --allow-unauthenticated \
+          --port=8080 \
+          --memory=2Gi \
+          --cpu=2 \
+          --min-instances=1 \
+          --max-instances=50 \
+          --concurrency=80 \
+          --timeout=300 \
+          --set-env-vars="SPRING_PROFILES_ACTIVE=production,APPLICATION_A_URL=${{ secrets.PROD_APP_A_URL }},APPLICATION_B_URL=${{ secrets.PROD_APP_B_URL }}" \
+          --set-secrets="APPLICATION_A_API_KEY=prod-app-a-key:latest,APPLICATION_B_API_KEY=prod-app-b-key:latest" \
+          --service-account=${{ secrets.CLOUD_RUN_SERVICE_ACCOUNT }} \
+          --labels=environment=production,service=bridge-service
+          
+    - name: 🌍 Get service URL
+      run: |
+        SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+          --platform=managed \
+          --region=${{ env.REGION }} \
+          --format='value(status.url)')
+        echo "Service deployed to: $SERVICE_URL"
+        echo "PRODUCTION_URL=$SERVICE_URL" >> $GITHUB_ENV
+        
+    - name: 🏥 Health check
+      run: |
+        sleep 30
+        curl -f "${{ env.PRODUCTION_URL }}/actuator/health" || exit 1
+        echo "✅ Production deployment health check passed!"
+        
+    - name: 📢 Deployment notification
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ job.status }}
+        channel: '#deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+        custom_payload: |
+          {
+            "text": "Bridge Service Production Deployment",
+            "attachments": [{
+              "color": "${{ job.status }}" === "success" ? "good" : "danger",
+              "fields": [{
+                "title": "Status",
+                "value": "${{ job.status }}",
+                "short": true
+              }, {
+                "title": "Service URL",
+                "value": "${{ env.PRODUCTION_URL }}",
+                "short": true
+              }]
+            }]
+          }
+
+  # ================================
+  # Cleanup
+  # ================================
+  cleanup:
+    name: 🧹 Cleanup
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    
+    steps:
+    - name: 🔐 Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+        
+    - name: 🔧 Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      
+    - name: 🧹 Clean up old images
+      run: |
+        # Keep last 10 images, delete older ones
+        gcloud container images list-tags ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }} \
+          --sort-by=~TIMESTAMP \
+          --limit=999 \
+          --format="get(digest)" | tail -n +11 | \
+          xargs -I {} gcloud container images delete ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}@{} --quiet || true
