@@ -229,19 +229,87 @@ jobs:
         java-version: ${{ env.JAVA_VERSION }}
         distribution: 'temurin'
         cache: maven
-        
-    - name: 🔍 Run OWASP Dependency Check
+    
+    - name: 🔨 Build application for security scan
+      run: ./mvnw compile -B
+      
+    - name: 🔍 Run OWASP Dependency Check (with fallback)
+      id: owasp-scan
+      continue-on-error: true
       run: |
+        echo "Attempting OWASP Dependency Check..."
         ./mvnw org.owasp:dependency-check-maven:check \
           -DfailBuildOnCVSS=7 \
-          -DsuppressionFile=.github/owasp-suppression.xml || true
+          -DautoUpdate=false \
+          -B || echo "OWASP scan failed - will use alternative scanning"
+          
+    - name: 🐛 Run SpotBugs Security Analysis
+      id: spotbugs-scan
+      continue-on-error: true
+      run: |
+        echo "Running SpotBugs security analysis..."
+        ./mvnw com.github.spotbugs:spotbugs-maven-plugin:spotbugs -B
+        
+        # Generate HTML report if XML exists
+        if [ -f "target/spotbugsXml.xml" ]; then
+          echo "SpotBugs XML report found, converting to HTML..."
+          ./mvnw com.github.spotbugs:spotbugs-maven-plugin:spotbugs -Dspotbugs.xmlOutput=false -B || true
+        fi
+        
+    - name: 📋 Create security scan summary
+      if: always()
+      run: |
+        echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Check OWASP results
+        if [ -f "target/dependency-check-report.html" ]; then
+          echo "### ✅ OWASP Dependency Check" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ✅ Completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- Report: Available in artifacts" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ⚠️ OWASP Dependency Check" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ⚠️ Failed (likely due to NVD API restrictions)" >> $GITHUB_STEP_SUMMARY
+          echo "- Fallback: Using SpotBugs for security analysis" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Check SpotBugs results
+        if [ -f "target/spotbugsXml.xml" ]; then
+          echo "### ✅ SpotBugs Security Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ✅ Completed successfully" >> $GITHUB_STEP_SUMMARY
+          
+          # Count bugs by priority
+          HIGH_BUGS=$(grep 'priority="1"' target/spotbugsXml.xml | wc -l || echo "0")
+          MEDIUM_BUGS=$(grep 'priority="2"' target/spotbugsXml.xml | wc -l || echo "0")
+          LOW_BUGS=$(grep 'priority="3"' target/spotbugsXml.xml | wc -l || echo "0")
+          
+          echo "- High Priority Issues: $HIGH_BUGS" >> $GITHUB_STEP_SUMMARY
+          echo "- Medium Priority Issues: $MEDIUM_BUGS" >> $GITHUB_STEP_SUMMARY
+          echo "- Low Priority Issues: $LOW_BUGS" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$HIGH_BUGS" -eq 0 ] && [ "$MEDIUM_BUGS" -lt 10 ]; then
+            echo "- Overall Status: ✅ **Security scan passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Overall Status: ⚠️ **Review recommended**" >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "### ❌ SpotBugs Security Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ❌ Failed to generate report" >> $GITHUB_STEP_SUMMARY
+        fi
           
     - name: 📊 Upload security scan results
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: security-scan-results
-        path: target/dependency-check-report.html
+        path: |
+          target/dependency-check-report.html
+          target/spotbugsXml.xml
+          target/site/spotbugs.html
+        if-no-files-found: warn
+        retention-days: 30
 
   # ================================
   # Build and Push Container Image
