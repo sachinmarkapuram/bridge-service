@@ -20,6 +20,24 @@ A Java-based web application built with Spring Boot that acts as a bridge betwee
          [Application B]
 ```
 
+## 🐳 Docker Support
+
+This service is **fully containerized** with:
+
+- **Multi-stage Dockerfile** for optimized image size
+- **Docker Compose** configurations for easy deployment
+- **Health checks** and monitoring built-in
+- **Production-ready** with security best practices
+- **Mock services** included for testing
+
+**Quick Docker Start:**
+```bash
+docker build -t bridge-service:latest .
+docker compose -f docker-compose.simple.yml up -d
+```
+
+📖 **See [DOCKER.md](DOCKER.md) for complete Docker documentation**
+
 ## API Endpoints
 
 ### Core Operations
@@ -106,8 +124,13 @@ For production deployment:
 
 ### Prerequisites
 
+**For Local Development:**
 - Java 17 or later
 - Maven 3.6 or later
+
+**For Docker Deployment:**
+- Docker Desktop or Docker Engine
+- Docker Compose (included with Docker Desktop)
 
 ### Building
 
@@ -130,18 +153,48 @@ mvn spring-boot:run -Dspring-boot.run.profiles=production
 
 ### Running with Docker
 
+The service is fully containerized with Docker support. See [DOCKER.md](DOCKER.md) for comprehensive deployment instructions.
+
+#### Quick Start with Docker
+
 ```bash
-# Build the application
-mvn clean package
+# Build the Docker image
+docker build -t bridge-service:latest .
 
-# Create Docker image (optional - create Dockerfile)
-docker build -t bridge-service .
+# Run with simple compose (development mode)
+docker compose -f docker-compose.simple.yml up -d
 
-# Run container
-docker run -p 8080:8080 \
-  -e APPLICATION_A_URL=http://app-a:8080 \
-  -e APPLICATION_B_URL=http://app-b:8080 \
-  bridge-service
+# Check container status
+docker ps
+
+# View application logs
+docker logs bridge-service
+
+# Test health endpoint
+curl http://localhost:8080/actuator/health
+
+# Stop the service
+docker compose -f docker-compose.simple.yml down
+```
+
+#### Production Deployment
+
+```bash
+# Full stack with mock services
+docker compose up -d
+
+# Or run with custom environment variables
+docker run -d \
+  --name bridge-service \
+  -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=production \
+  -e APPLICATION_A_URL=http://app-a-service:8080 \
+  -e APPLICATION_B_URL=http://app-b-service:8080 \
+  -e APPLICATION_A_API_KEY=your-secret-key-a \
+  -e APPLICATION_B_API_KEY=your-secret-key-b \
+  -v $(pwd)/logs:/app/logs \
+  --restart unless-stopped \
+  bridge-service:latest
 ```
 
 ## Usage Examples
