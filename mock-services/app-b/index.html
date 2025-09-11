@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mock Application B</title>
+</head>
+<body>
+    <h1>Mock Application B</h1>
+    <p>This is a mock service for testing the bridge service.</p>
+    <script>
+        // Simple API endpoint simulation
+        if (window.location.pathname === '/api/data') {
+            document.body.innerHTML = JSON.stringify({
+                "service": "application-b", 
+                "status": "healthy",
+                "timestamp": new Date().toISOString(),
+                "data": {
+                    "message": "Hello from Application B",
+                    "version": "2.0.0"
+                }
+            });
+            document.body.style.fontFamily = 'monospace';
+        }
+    </script>
+</body>
+</html>

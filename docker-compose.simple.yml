@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  bridge-service:
+    build: .
+    image: bridge-service:latest
+    container_name: bridge-service
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=development
+      - APPLICATION_A_URL=http://host.docker.internal:8081
+      - APPLICATION_B_URL=http://host.docker.internal:8082
+      - APPLICATION_A_API_KEY=dev-api-key-a
+      - APPLICATION_B_API_KEY=dev-api-key-b
+      - JAVA_OPTS=-Xmx512m -Xms256m
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
