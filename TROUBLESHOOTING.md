@@ -151,7 +151,58 @@ When everything is working correctly, you should see:
    - `jacoco.xml` in `target/site/jacoco/`
    - HTML coverage report accessible
 
+### ❌ "Resource not accessible by integration" Error
+
+**Problem**: GitHub Actions shows "HttpError: Resource not accessible by integration" when trying to create test reports or check runs.
+
+**Root Cause**: 
+- Missing permissions in the GitHub Actions workflow
+- Third-party actions (like test-reporter) need specific permissions to access GitHub API
+- Default GITHUB_TOKEN has limited permissions in some repository configurations
+
+**Solution**:
+1. **Added comprehensive permissions to workflow**:
+   ```yaml
+   permissions:
+     contents: read
+     actions: read
+     checks: write
+     pull-requests: write
+     statuses: write
+     issues: write
+     security-events: write
+   ```
+
+2. **Enhanced error handling**:
+   ```yaml
+   - name: 📊 Generate test report (fallback)
+     uses: dorny/test-reporter@v1
+     continue-on-error: true  # Don't fail the workflow if this step fails
+     with:
+       fail-on-error: false   # Don't fail on test failures
+   ```
+
+3. **Added native GitHub summary as primary approach**:
+   - Uses built-in `$GITHUB_STEP_SUMMARY` instead of external actions
+   - Parses test XML files directly using shell commands
+   - More reliable and doesn't depend on third-party integrations
+
+**Verification**:
+```bash
+# The workflow should now show test results in the summary without errors
+# Check GitHub Actions workflow runs for:
+# 1. No "Resource not accessible" errors
+# 2. Test results visible in workflow summary
+# 3. Proper permissions applied
+```
+
+**Alternative Solutions**:
+If the error persists:
+1. **Repository Settings**: Go to Settings → Actions → General → Workflow permissions
+2. **Choose**: "Read and write permissions" instead of "Read repository contents permission"
+3. **Enable**: "Allow GitHub Actions to create and approve pull requests"
+
 ---
 
-**Last Updated**: Fixed unit test reporting issue
+**Last Updated**: Fixed GitHub Actions integration permissions error
 **Status**: ✅ Resolved

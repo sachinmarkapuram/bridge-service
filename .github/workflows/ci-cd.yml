@@ -1,5 +1,15 @@
 name: Bridge Service CI/CD
 
+# Add proper permissions for GitHub integrations
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: write
+  statuses: write
+  issues: write
+  security-events: write
+
 on:
   push:
     branches: [ main, docker_setup, develop ]
@@ -57,14 +67,61 @@ jobs:
           -Dmaven.test.failure.ignore=false \
           -B -V
           
-    - name: 📊 Generate test report
+    - name: 📝 Create test summary
+      if: always()
+      run: |
+        echo "## 🧪 Unit Test Results" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -d "target/surefire-reports" ] && [ "$(ls -A target/surefire-reports/TEST-*.xml 2>/dev/null)" ]; then
+          # Parse test results from XML files
+          TOTAL_TESTS=0
+          TOTAL_FAILURES=0
+          TOTAL_ERRORS=0
+          TOTAL_SKIPPED=0
+          
+          for file in target/surefire-reports/TEST-*.xml; do
+            if [ -f "$file" ]; then
+              TESTS=$(grep '<testsuite' "$file" | sed -n 's/.*tests="\([0-9]*\)".*/\1/p')
+              FAILURES=$(grep '<testsuite' "$file" | sed -n 's/.*failures="\([0-9]*\)".*/\1/p')
+              ERRORS=$(grep '<testsuite' "$file" | sed -n 's/.*errors="\([0-9]*\)".*/\1/p')
+              SKIPPED=$(grep '<testsuite' "$file" | sed -n 's/.*skipped="\([0-9]*\)".*/\1/p')
+              
+              TOTAL_TESTS=$((TOTAL_TESTS + ${TESTS:-0}))
+              TOTAL_FAILURES=$((TOTAL_FAILURES + ${FAILURES:-0}))
+              TOTAL_ERRORS=$((TOTAL_ERRORS + ${ERRORS:-0}))
+              TOTAL_SKIPPED=$((TOTAL_SKIPPED + ${SKIPPED:-0}))
+            fi
+          done
+          
+          echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Tests | $TOTAL_TESTS |" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Failures | $TOTAL_FAILURES |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚠️ Errors | $TOTAL_ERRORS |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⏭️ Skipped | $TOTAL_SKIPPED |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ $TOTAL_FAILURES -eq 0 ] && [ $TOTAL_ERRORS -eq 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Some tests failed. Check the logs for details.**" >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "⚠️ No test reports found in target/surefire-reports/" >> $GITHUB_STEP_SUMMARY
+        fi
+          
+    - name: 📊 Generate test report (fallback)
       uses: dorny/test-reporter@v1
       if: success() || failure()
       with:
         name: Unit Test Results
         path: 'target/surefire-reports/TEST-*.xml'
         reporter: java-junit
-        fail-on-error: true
+        fail-on-error: false
+        max-annotations: 10
+        only-summary: false
+      continue-on-error: true
         
     - name: 📈 Upload coverage reports to Codecov
       if: success()
@@ -144,6 +201,9 @@ jobs:
         path: 'target/failsafe-reports/TEST-*.xml'
         reporter: java-junit
         fail-on-error: false
+        max-annotations: 10
+        only-summary: false
+      continue-on-error: true
         
     - name: 🧹 Cleanup test environment
       if: always()
