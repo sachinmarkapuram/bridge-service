@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  bridge-service:
+    build: .
+    image: bridge-service:latest
+    container_name: bridge-service
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - APPLICATION_A_URL=http://application-a:8081
+      - APPLICATION_B_URL=http://application-b:8082
+      - APPLICATION_A_API_KEY=your-app-a-api-key
+      - APPLICATION_B_API_KEY=your-app-b-api-key
+      - SERVICE_TIMEOUT=10000
+      - MAX_RETRIES=3
+      - JAVA_OPTS=-Xmx512m -Xms256m
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - bridge-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      - application-a
+      - application-b
+
+  # Mock Application A (for testing purposes)
+  application-a:
+    image: nginx:alpine
+    container_name: application-a
+    ports:
+      - "8081:80"
+    volumes:
+      - ./mock-services/app-a:/usr/share/nginx/html:ro
+    networks:
+      - bridge-network
+    restart: unless-stopped
+
+  # Mock Application B (for testing purposes)  
+  application-b:
+    image: nginx:alpine
+    container_name: application-b
+    ports:
+      - "8082:80"
+    volumes:
+      - ./mock-services/app-b:/usr/share/nginx/html:ro
+    networks:
+      - bridge-network
+    restart: unless-stopped
+
+networks:
+  bridge-network:
+    driver: bridge
+    name: bridge-service-network
+
+volumes:
+  logs:
+    driver: local

@@ -1,0 +1,58 @@
+# Git files
+.git
+.gitignore
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Compiled class files
+target/
+*.class
+
+# Log files
+*.log
+logs/
+
+# Package files
+*.jar
+*.war
+*.ear
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# Docker files (to avoid recursive Docker builds)
+Dockerfile*
+docker-compose*
+
+# Documentation
+*.md
+LICENSE
+
+# Test files (if not needed for build)
+*.test
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Node modules (if any frontend components)
+node_modules/
+npm-debug.log*
+
+# Environment files
+.env*
