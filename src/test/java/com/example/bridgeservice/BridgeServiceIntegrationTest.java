@@ -91,6 +91,6 @@ public class BridgeServiceIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("bridge-service");
+        assertThat(response.getBody()).contains("\"serviceName\":\"bridge-service\"");
     }
 }

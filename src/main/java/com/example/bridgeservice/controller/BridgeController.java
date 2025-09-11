@@ -35,6 +35,11 @@ public class BridgeController {
         
         try {
             BridgeResponse response = orchestrationService.routeToApplication(request);
+            if (response == null) {
+                logger.warn("Orchestration service returned null response for route request");
+                BridgeResponse errorResponse = BridgeResponse.error("Service returned null response");
+                return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
             HttpStatus status = response.isSuccess() ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
             return new ResponseEntity<>(response, status);
         } catch (Exception e) {
@@ -54,6 +59,11 @@ public class BridgeController {
         
         try {
             BridgeResponse response = orchestrationService.coordinateAToB(request);
+            if (response == null) {
+                logger.warn("Orchestration service returned null response for A->B coordination");
+                BridgeResponse errorResponse = BridgeResponse.error("Service returned null response");
+                return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
             HttpStatus status = response.isSuccess() ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
             return new ResponseEntity<>(response, status);
         } catch (Exception e) {
@@ -73,6 +83,11 @@ public class BridgeController {
         
         try {
             BridgeResponse response = orchestrationService.coordinateBToA(request);
+            if (response == null) {
+                logger.warn("Orchestration service returned null response for B->A coordination");
+                BridgeResponse errorResponse = BridgeResponse.error("Service returned null response");
+                return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
             HttpStatus status = response.isSuccess() ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
             return new ResponseEntity<>(response, status);
         } catch (Exception e) {
@@ -92,6 +107,11 @@ public class BridgeController {
         
         try {
             BridgeResponse response = orchestrationService.coordinateParallel(request);
+            if (response == null) {
+                logger.warn("Orchestration service returned null response for parallel coordination");
+                BridgeResponse errorResponse = BridgeResponse.error("Service returned null response");
+                return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
             HttpStatus status = response.isSuccess() ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
             return new ResponseEntity<>(response, status);
         } catch (Exception e) {
@@ -111,6 +131,11 @@ public class BridgeController {
         
         try {
             BridgeResponse response = orchestrationService.healthCheck();
+            if (response == null) {
+                logger.warn("Orchestration service returned null response for health check");
+                BridgeResponse errorResponse = BridgeResponse.error("Health check returned null response");
+                return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
             return new ResponseEntity<>(response, HttpStatus.OK);
         } catch (Exception e) {
             logger.error("Error processing health check: {}", e.getMessage(), e);
@@ -128,7 +153,7 @@ public class BridgeController {
         logger.info("Received info request");
         
         Map<String, Object> info = Map.of(
-            "serviceName", "Bridge Service",
+            "serviceName", "bridge-service",
             "version", "1.0.0",
             "description", "Service for connecting two stateless applications",
             "endpoints", Map.of(
