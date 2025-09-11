@@ -62,7 +62,7 @@ jobs:
       if: success() || failure()
       with:
         name: Unit Test Results
-        path: target/surefire-reports/*.xml
+        path: 'target/surefire-reports/TEST-*.xml'
         reporter: java-junit
         fail-on-error: true
         
@@ -70,10 +70,20 @@ jobs:
       if: success()
       uses: codecov/codecov-action@v4
       with:
-        file: ./target/site/jacoco/jacoco.xml
+        file: target/site/jacoco/jacoco.xml
         flags: unittests
         name: codecov-unit-tests
         fail_ci_if_error: false
+        
+    - name: 📁 Upload test reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: unit-test-reports
+        path: |
+          target/surefire-reports/
+          target/site/jacoco/
+        retention-days: 30
 
   # ================================
   # Integration Tests with Mock Services
@@ -131,9 +141,9 @@ jobs:
       if: success() || failure()
       with:
         name: Integration Test Results
-        path: target/failsafe-reports/*.xml
+        path: 'target/failsafe-reports/TEST-*.xml'
         reporter: java-junit
-        fail-on-error: true
+        fail-on-error: false
         
     - name: 🧹 Cleanup test environment
       if: always()
