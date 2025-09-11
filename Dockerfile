@@ -1,7 +1,7 @@
 # Multi-stage build for optimized image size
 
 # Build stage
-FROM openjdk:17-jdk-slim as builder
+FROM openjdk:17-jdk-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -24,7 +24,7 @@ COPY src ./src
 RUN ./mvnw clean package -DskipTests
 
 # Runtime stage
-FROM openjdk:17-jre-slim
+FROM openjdk:17-jdk-slim
 
 # Install curl for health checks (minimal layer)
 RUN apt-get update && apt-get install -y --no-install-recommends \
