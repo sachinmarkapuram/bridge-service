@@ -38,6 +38,25 @@ docker compose -f docker-compose.simple.yml up -d
 
 📖 **See [DOCKER.md](DOCKER.md) for complete Docker documentation**
 
+## 🔄 CI/CD Pipeline
+
+This service includes a **comprehensive CI/CD pipeline** with:
+
+- **🧪 Automated Testing**: Unit tests + Integration tests with mock services
+- **🔒 Security Scanning**: OWASP dependency vulnerability analysis
+- **🐳 Container Builds**: Multi-stage Docker builds with optimization
+- **🚀 Cloud Deployment**: Automated deployment to Google Cloud Run
+- **📊 Quality Reports**: Test coverage and security scan reports
+- **🔔 Notifications**: Slack integration for deployment status
+
+**Pipeline Triggers:**
+- **Pull Requests**: Run tests and security scans
+- **docker_setup/develop**: Deploy to staging environment 
+- **main branch**: Deploy to production environment
+- **Manual**: On-demand deployments via GitHub Actions UI
+
+🔗 **See [CICD.md](CICD.md) for complete pipeline documentation and setup**
+
 ## API Endpoints
 
 ### Core Operations
