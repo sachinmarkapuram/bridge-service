@@ -145,6 +145,32 @@ public class BridgeController {
     }
 
     /**
+     * Initiate asynchronous data fetch from London Stock Exchange
+     * GET /api/bridge/initiate
+     */
+    @GetMapping("/initiate")
+    public ResponseEntity<BridgeResponse> initiateLSEDataFetch(
+            @RequestParam(value = "dataType", defaultValue = "market") String dataType,
+            @RequestParam(value = "symbol", required = false) String symbol) {
+        logger.info("Received LSE data initiation request - dataType: {}, symbol: {}", dataType, symbol);
+        
+        try {
+            BridgeResponse response = orchestrationService.initiateLSEDataFetch(dataType, symbol);
+            if (response == null) {
+                logger.warn("Orchestration service returned null response for LSE initiation");
+                BridgeResponse errorResponse = BridgeResponse.error("Service returned null response");
+                return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+            HttpStatus status = response.isSuccess() ? HttpStatus.ACCEPTED : HttpStatus.BAD_REQUEST;
+            return new ResponseEntity<>(response, status);
+        } catch (Exception e) {
+            logger.error("Error processing LSE initiation request: {}", e.getMessage(), e);
+            BridgeResponse errorResponse = BridgeResponse.error("Internal server error: " + e.getMessage());
+            return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
      * Get bridge service information
      * GET /api/bridge/info
      */
@@ -161,6 +187,7 @@ public class BridgeController {
                 "coordinateAToB", "POST /api/bridge/coordinate/a-to-b",
                 "coordinateBToA", "POST /api/bridge/coordinate/b-to-a",
                 "coordinateParallel", "POST /api/bridge/coordinate/parallel",
+                "initiate", "GET /api/bridge/initiate?dataType={market|stock}&symbol={SYMBOL}",
                 "health", "GET /api/bridge/health",
                 "info", "GET /api/bridge/info"
             ),
@@ -168,6 +195,7 @@ public class BridgeController {
                 "routing", "Route requests to specific applications",
                 "coordination", "Coordinate data flow between applications",
                 "parallel", "Execute operations in parallel on both applications",
+                "lse_integration", "Initiate asynchronous data fetch from London Stock Exchange",
                 "monitoring", "Health check and service information"
             )
         );
