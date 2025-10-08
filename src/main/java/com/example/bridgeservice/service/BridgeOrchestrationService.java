@@ -4,6 +4,7 @@ import com.example.bridgeservice.client.ApplicationAClient;
 import com.example.bridgeservice.client.ApplicationBClient;
 import com.example.bridgeservice.model.BridgeRequest;
 import com.example.bridgeservice.model.BridgeResponse;
+import com.example.bridgeservice.service.LondonStockExchangeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,9 @@ public class BridgeOrchestrationService {
 
     @Autowired
     private ApplicationBClient applicationBClient;
+
+    @Autowired
+    private LondonStockExchangeService londonStockExchangeService;
 
     /**
      * Route request to a specific application
@@ -206,6 +210,61 @@ public class BridgeOrchestrationService {
         } catch (Exception e) {
             logger.error("Error in parallel coordination: {}", e.getMessage(), e);
             return createErrorResponse(correlationId, "Failed to execute parallel coordination: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Initiate asynchronous data fetch from London Stock Exchange
+     */
+    public BridgeResponse initiateLSEDataFetch(String dataType, String symbol) {
+        String correlationId = UUID.randomUUID().toString();
+        logger.info("Initiating LSE data fetch with correlation ID: {} for dataType: {} and symbol: {}", correlationId, dataType, symbol);
+
+        try {
+            Map<String, Object> result = new HashMap<>();
+            result.put("correlationId", correlationId);
+            result.put("dataType", dataType);
+            result.put("symbol", symbol);
+            result.put("status", "initiated");
+            result.put("message", "Async LSE data fetch has been initiated");
+            result.put("timestamp", System.currentTimeMillis());
+
+            // Trigger async fetch based on data type
+            if ("market".equalsIgnoreCase(dataType)) {
+                londonStockExchangeService.fetchMarketDataAsync(correlationId)
+                    .thenAccept(lseData -> {
+                        logger.info("LSE market data fetch completed for correlation ID: {}", correlationId);
+                        // In a real application, you might store this data or notify consumers
+                        // For now, we just log the successful completion
+                    })
+                    .exceptionally(throwable -> {
+                        logger.error("LSE market data fetch failed for correlation ID {}: {}", correlationId, throwable.getMessage());
+                        return null;
+                    });
+            } else if ("stock".equalsIgnoreCase(dataType) && symbol != null && !symbol.trim().isEmpty()) {
+                londonStockExchangeService.fetchStockDataAsync(symbol, correlationId)
+                    .thenAccept(lseData -> {
+                        logger.info("LSE stock data fetch completed for symbol: {} with correlation ID: {}", symbol, correlationId);
+                        // In a real application, you might store this data or notify consumers
+                        // For now, we just log the successful completion
+                    })
+                    .exceptionally(throwable -> {
+                        logger.error("LSE stock data fetch failed for symbol {} with correlation ID {}: {}", symbol, correlationId, throwable.getMessage());
+                        return null;
+                    });
+            } else {
+                return createErrorResponse(correlationId, "Invalid data type or missing symbol. Supported types: 'market' or 'stock' (with symbol)");
+            }
+
+            BridgeResponse response = BridgeResponse.success(result, "LSE data fetch initiated successfully");
+            response.setCorrelationId(correlationId);
+            response.setSourceApplication("London Stock Exchange Bridge");
+            
+            return response;
+
+        } catch (Exception e) {
+            logger.error("Error initiating LSE data fetch: {}", e.getMessage(), e);
+            return createErrorResponse(UUID.randomUUID().toString(), "Failed to initiate LSE data fetch: " + e.getMessage());
         }
     }
 

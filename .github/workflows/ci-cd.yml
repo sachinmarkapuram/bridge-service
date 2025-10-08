@@ -281,9 +281,9 @@ jobs:
           echo "- Status: ✅ Completed successfully" >> $GITHUB_STEP_SUMMARY
           
           # Count bugs by priority
-          HIGH_BUGS=$(grep 'priority="1"' target/spotbugsXml.xml | wc -l || echo "0")
-          MEDIUM_BUGS=$(grep 'priority="2"' target/spotbugsXml.xml | wc -l || echo "0")
-          LOW_BUGS=$(grep 'priority="3"' target/spotbugsXml.xml | wc -l || echo "0")
+          HIGH_BUGS=$(grep -o "priority='1'" target/spotbugsXml.xml | wc -l | tr -d ' ' || echo "0")
+          MEDIUM_BUGS=$(grep -o "priority='2'" target/spotbugsXml.xml | wc -l | tr -d ' ' || echo "0")
+          LOW_BUGS=$(grep -o "priority='3'" target/spotbugsXml.xml | wc -l | tr -d ' ' || echo "0")
           
           echo "- High Priority Issues: $HIGH_BUGS" >> $GITHUB_STEP_SUMMARY
           echo "- Medium Priority Issues: $MEDIUM_BUGS" >> $GITHUB_STEP_SUMMARY

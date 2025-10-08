@@ -59,7 +59,6 @@ resilience4j:
       applicationA:
         max-attempts: 3
         wait-duration: 1s
-        enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
         retry-exceptions:
           - org.springframework.web.client.ResourceAccessException
@@ -68,7 +67,6 @@ resilience4j:
       applicationB:
         max-attempts: 3
         wait-duration: 1s
-        enable-exponential-backoff: true
         exponential-backoff-multiplier: 2
         retry-exceptions:
           - org.springframework.web.client.ResourceAccessException

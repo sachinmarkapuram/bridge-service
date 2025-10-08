@@ -1,0 +1,64 @@
+# Integration Test Environment Configuration - Test Override
+server:
+  port: 0  # Use random port for tests
+
+spring:
+  application:
+    name: bridge-service-integration-test
+
+# Test-specific configurations for LSE async operations
+bridge:
+  lse:
+    async:
+      core-pool-size: 2
+      max-pool-size: 5
+      queue-capacity: 10
+      thread-name-prefix: "LSE-Test-Async-"
+  services:
+    application-a:
+      base-url: http://localhost:8081
+      api-key: test-api-key-a
+      enabled: false  # Disabled for integration tests
+    application-b:
+      base-url: http://localhost:8082
+      api-key: test-api-key-b
+      enabled: false  # Disabled for integration tests
+    timeout-millis: 3000
+    max-retries: 1
+
+# Test logging configuration
+logging:
+  level:
+    com.example.bridgeservice: DEBUG
+    com.example.bridgeservice.service.LondonStockExchangeService: DEBUG
+    com.example.bridgeservice.controller.BridgeController: DEBUG
+    org.springframework.test: WARN
+    org.springframework.boot.test: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%logger{36}:%line] - %msg%n"
+
+# Minimal actuator configuration for tests
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info,circuitbreakers,retries"
+  endpoint:
+    health:
+      show-details: when_authorized
+      
+# Disable resilience4j for simpler integration testing
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        register-health-indicator: false
+        sliding-window-size: 3
+        minimum-number-of-calls: 2
+        wait-duration-in-open-state: 1s
+        failure-rate-threshold: 50
+  retry:
+    configs:
+      default:
+        max-attempts: 1
+        wait-duration: 100ms
